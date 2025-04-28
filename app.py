@@ -102,9 +102,5 @@ if st.button("Check URL"):
         else:
             st.success(f"✅ Legitimate Website (Confidence: {(1 - phishing_proba) * 100:.2f}%)")
 
-        # Show extracted features
-        st.subheader("🔍 Extracted Features:")
-        st.json(features)
-
     else:
         st.warning("⚠️ Please enter a valid URL.")
