@@ -66,10 +66,6 @@ def extract_features(url):
         'has_trusted_keyword': int(any(kw in ext.domain.lower() for kw in trusted_keywords))
     }
 
-    # Adjust logic here: if suspicious_tld is 1, increase suspicion regardless of the trusted keyword
-    if features['suspicious_tld'] == 1:
-        features['has_trusted_keyword'] = 0  # Override trusted keyword if suspicious TLD is detected
-
     return features
 
 # Streamlit UI
@@ -94,13 +90,17 @@ if st.button("Check URL"):
         # Predict
         phishing_proba = model.predict_proba(input_scaled)[0][1]
 
-        # Result display
-        if phishing_proba > 0.7:
-            st.error(f"🚨 Phishing Detected! (Confidence: {phishing_proba*100:.2f}%)")
+        # Check suspicious TLD first, apply a stricter threshold
+        if features['suspicious_tld'] == 1:
+            # If suspicious TLD is detected, forcefully mark it as suspicious or phishing
+            phishing_proba = 1.0  # Force phishing detection if TLD is suspicious
+            st.warning(f"⚠️ Suspicious URL due to TLD! (Confidence: {phishing_proba * 100:.2f}%)")
+        elif phishing_proba > 0.7:
+            st.error(f"🚨 Phishing Detected! (Confidence: {phishing_proba * 100:.2f}%)")
         elif 0.4 < phishing_proba <= 0.7:
-            st.warning(f"⚠️ Suspicious URL! (Confidence: {phishing_proba*100:.2f}%)")
+            st.warning(f"⚠️ Suspicious URL! (Confidence: {phishing_proba * 100:.2f}%)")
         else:
-            st.success(f"✅ Legitimate Website (Confidence: {(1-phishing_proba)*100:.2f}%)")
+            st.success(f"✅ Legitimate Website (Confidence: {(1 - phishing_proba) * 100:.2f}%)")
 
         # Show extracted features
         st.subheader("🔍 Extracted Features:")
