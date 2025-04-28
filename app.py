@@ -28,7 +28,50 @@ def check_dns(domain, rtype):
 trusted_keywords = ["facebook", "paypal", "microsoft", "google", "apple", "amazon", "netflix", "adobe"]
 
 # Suspicious TLDs
-suspicious_tlds = ['zip', 'review', 'country', 'kim', 'cricket', 'science', 'work', 'party', 'gq', 'tk', 'ml', 'cf','win','lt']
+suspicious_tlds = [
+    ".zip",
+    ".review",
+    ".country",
+    ".kim",
+    ".cricket",
+    ".science",
+    ".work",
+    ".party",
+    ".gq",
+    ".cf",
+    ".ml",
+    ".tk",
+    ".top",
+    ".fit",
+    ".men",
+    ".loan",
+    ".download",
+    ".racing",
+    ".accountant",
+    ".stream",
+    ".mom",
+    ".bar",
+    ".faith",
+    ".date",
+    ".click",
+    ".host",
+    ".link",
+    ".pw",
+    ".xn--p1ai",     # Punycode for .рф (Russia)
+    ".buzz",
+    ".surf",
+    ".mls",
+    ".rest",
+    ".xn--80asehdb", # Punycode for .онлайн
+    ".cam",
+    ".uno",
+    ".vegas",
+    ".bid",
+    ".trade",
+    ".webcam",
+    ".lt"
+]
+
 
 # Feature extraction function
 def extract_features(url):
