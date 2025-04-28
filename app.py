@@ -66,6 +66,10 @@ def extract_features(url):
         'has_trusted_keyword': int(any(kw in ext.domain.lower() for kw in trusted_keywords))
     }
 
+    # Adjust logic here: if suspicious_tld is 1, increase suspicion regardless of the trusted keyword
+    if features['suspicious_tld'] == 1:
+        features['has_trusted_keyword'] = 0  # Override trusted keyword if suspicious TLD is detected
+
     return features
 
 # Streamlit UI
