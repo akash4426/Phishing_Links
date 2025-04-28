@@ -10,7 +10,7 @@ model = joblib.load("phishing_model_updated1.pkl")
 scaler = joblib.load("scaler.pkl")
 expected_columns = joblib.load("features1.pkl")
 
-# DNS Cache to speed up checks
+# DNS Cache to speed up repeated checks
 dns_cache = {}
 
 def check_dns(domain, rtype):
@@ -29,49 +29,12 @@ trusted_keywords = ["facebook", "paypal", "microsoft", "google", "apple", "amazo
 
 # Suspicious TLDs
 suspicious_tlds = [
-    ".zip",
-    ".review",
-    ".country",
-    ".kim",
-    ".cricket",
-    ".science",
-    ".work",
-    ".party",
-    ".gq",
-    ".cf",
-    ".ml",
-    ".tk",
-    ".top",
-    ".fit",
-    ".men",
-    ".loan",
-    ".download",
-    ".racing",
-    ".accountant",
-    ".stream",
-    ".mom",
-    ".bar",
-    ".faith",
-    ".date",
-    ".click",
-    ".host",
-    ".link",
-    ".pw",
-    ".xn--p1ai",     # Punycode for .рф (Russia)
-    ".buzz",
-    ".surf",
-    ".mls",
-    ".rest",
-    ".xn--80asehdb", # Punycode for .онлайн
-    ".cam",
-    ".uno",
-    ".vegas",
-    ".bid",
-    ".trade",
-    ".webcam",
-    ".lt"
+    ".zip", ".review", ".country", ".kim", ".cricket", ".science", ".work", ".party",
+    ".gq", ".cf", ".ml", ".tk", ".top", ".fit", ".men", ".loan", ".download", ".racing",
+    ".accountant", ".stream", ".mom", ".bar", ".faith", ".date", ".click", ".host", ".link",
+    ".pw", ".xn--p1ai", ".buzz", ".surf", ".mls", ".rest", ".xn--80asehdb", ".cam", ".uno",
+    ".vegas", ".bid", ".trade", ".webcam", ".lt"
 ]
-
 
 # Feature extraction function
 def extract_features(url):
@@ -83,6 +46,7 @@ def extract_features(url):
 
     domain = f"{ext.domain}.{ext.suffix}"
     subdomain_parts = ext.subdomain.split('.') if ext.subdomain else []
+    suffix = "." + ext.suffix.lower()
 
     features = {
         'url_length': len(url),
@@ -96,13 +60,14 @@ def extract_features(url):
         'has_a_record': check_dns(domain, 'A'),
         'has_mx_record': check_dns(domain, 'MX'),
         'subdomain_depth': len(subdomain_parts),
-        'suspicious_tld': int(ext.suffix in suspicious_tlds),
+        'suspicious_tld': int(suffix in suspicious_tlds),
         'has_trusted_keyword': int(any(kw in ext.domain.lower() for kw in trusted_keywords))
     }
 
     return features
 
 # Streamlit UI
+st.set_page_config(page_title="Phishing URL Detector", page_icon="🚨")
 st.title("🚨 Real-Time Phishing URL Detector")
 st.write("Enter any URL below to check if it is **Phishing**, **Suspicious**, or **Legitimate**.")
 
@@ -123,11 +88,16 @@ if st.button("Check URL"):
         # Predict
         phishing_proba = model.predict_proba(input_scaled)[0][1]
 
+        # Show results
         if phishing_proba > 0.6:
             st.error(f"🚨 Phishing Detected! (Confidence: {phishing_proba*100:.2f}%)")
         elif 0.4 < phishing_proba <= 0.6:
             st.warning(f"⚠️ Suspicious URL! (Confidence: {phishing_proba*100:.2f}%)")
         else:
             st.success(f"✅ Legitimate Website (Confidence: {(1-phishing_proba)*100:.2f}%)")
+        
+        st.subheader("🔍 Extracted Features:")
+        st.json(features)
+        
     else:
         st.warning("⚠️ Please enter a valid URL.")
