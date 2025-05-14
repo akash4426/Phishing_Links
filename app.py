@@ -76,7 +76,7 @@ def extract_features(url):
 # Streamlit UI setup
 st.set_page_config(page_title="Phishing URL Detector", page_icon="🚨")
 st.title("🚨 Real-Time Phishing URL Detector")
-st.write("Enter any URL below to check if it is **Phishing**, **Suspicious**, or **Legitimate**.")
+st.write("Enter any URL below to check if it is **Phishing**, **Suspicious**, or **Legitimate** Sites.")
 
 url = st.text_input("🔗 Enter URL here:")
 
