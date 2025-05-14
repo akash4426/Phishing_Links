@@ -5,57 +5,65 @@ from urllib.parse import urlparse
 import tldextract
 import dns.resolver
 import socket
+import whois
+from datetime import datetime
 
-# Load trained model, scaler, and expected feature names
+# Load model and input scaler
 model = joblib.load("phishing_model_updated1.pkl")
 scaler = joblib.load("scaler.pkl")
 expected_columns = joblib.load("features1.pkl")
 
-# DNS Cache to reduce repeated queries
+# DNS cache
 dns_cache = {}
 
 def check_dns(domain, rtype):
     key = (domain, rtype)
     if key in dns_cache:
         return dns_cache[key]
-    
     try:
         resolver = dns.resolver.Resolver()
-        resolver.nameservers = ['1.1.1.1', '8.8.8.8']  # Cloudflare and Google DNS
+        resolver.nameservers = ['1.1.1.1', '8.8.8.8']
         resolver.timeout = 3
         resolver.lifetime = 3
-        answers = resolver.resolve(domain, rtype)
-        dns_cache[key] = 1 if answers else 0
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.Timeout,
-            dns.resolver.NoNameservers, socket.gaierror, Exception):
+        resolver.resolve(domain, rtype)
+        dns_cache[key] = 1
+    except Exception:
         dns_cache[key] = 0
     return dns_cache[key]
 
-# Trusted brand keywords to detect brand obfuscation
-trusted_keywords = ["facebook", "paypal", "microsoft", "google", "apple", "amazon", "netflix", "adobe"]
-
-# Known suspicious TLDs
+# Suspicious TLDs list
 suspicious_tlds = [
     ".zip", ".review", ".country", ".kim", ".cricket", ".science", ".work", ".party",
     ".gq", ".cf", ".ml", ".tk", ".top", ".fit", ".men", ".loan", ".download", ".racing",
     ".accountant", ".stream", ".mom", ".bar", ".faith", ".date", ".click", ".host", ".link",
-    ".pw", ".xn--p1ai", ".buzz", ".surf", ".mls", ".rest", ".xn--80asehdb", ".cam", ".uno",
-    ".vegas", ".bid", ".trade", ".webcam", ".lt"
+    ".pw", ".buzz", ".surf", ".cam", ".uno", ".bid", ".trade", ".webcam", ".lt", ".site"
 ]
 
-# Feature extraction function
-def extract_features(url):
+trusted_keywords = ["facebook", "paypal", "microsoft", "google", "apple", "amazon", "netflix", "adobe"]
+
+def get_domain_age(domain):
+    try:
+        w = whois.whois(domain)
+        creation_date = w.creation_date
+        if isinstance(creation_date, list):
+            creation_date = creation_date[0]
+        if creation_date:
+            return (datetime.now() - creation_date).days
+    except:
+        pass
+    return 0  # Default to newly registered
+
+# Feature extraction for model input
+def extract_model_features(url):
     if not url.startswith(("http://", "https://")):
         url = "http://" + url
-
     parsed = urlparse(url)
     ext = tldextract.extract(url)
-
     domain = f"{ext.domain}.{ext.suffix}"
     subdomain_parts = ext.subdomain.split('.') if ext.subdomain else []
     suffix = "." + ext.suffix.lower()
 
-    features = {
+    return {
         'url_length': len(url),
         'dot_count': url.count('.'),
         'hyphen_count': url.count('-'),
@@ -63,48 +71,63 @@ def extract_features(url):
         'is_https': int(url.startswith('https')),
         'domain_length': len(parsed.netloc),
         'path_length': len(parsed.path),
-        'domain_suffix': len(ext.suffix),  # Suffix encoded as length
+        'domain_suffix': len(ext.suffix),
         'has_a_record': check_dns(domain, 'A'),
         'has_mx_record': check_dns(domain, 'MX'),
         'subdomain_depth': len(subdomain_parts),
         'suspicious_tld': int(suffix in suspicious_tlds),
-        'has_trusted_keyword': int(any(kw in ext.domain.lower() for kw in trusted_keywords))
+        'has_trusted_keyword': int(any(kw in ext.domain.lower() for kw in trusted_keywords)),
     }
 
-    return features
+# Extra (non-model) features for manual logic
+def extract_extra_features(url):
+    if not url.startswith(("http://", "https://")):
+        url = "http://" + url
+    ext = tldextract.extract(url)
+    domain = f"{ext.domain}.{ext.suffix}"
+    suffix = "." + ext.suffix.lower()
 
-# Streamlit UI setup
+    return {
+        'suspicious_tld': int(suffix in suspicious_tlds),
+        'whois_age_days': get_domain_age(domain)
+    }
+
+# Streamlit App
 st.set_page_config(page_title="Phishing URL Detector", page_icon="🚨")
 st.title("🚨 Real-Time Phishing URL Detector")
-st.write("Enter any URL below to check if it is **Phishing**, **Suspicious**, or **Legitimate** Sites.")
+st.write("Enter any URL below to check if it is **Phishing**, **Suspicious**, or **Legitimate**.")
 
 url = st.text_input("🔗 Enter URL here:")
 
 if st.button("Check URL"):
     if url:
         try:
-            # Extract and transform features
-            features = extract_features(url)
-            input_df = pd.DataFrame([features])
+            model_features = extract_model_features(url)
+            extra_features = extract_extra_features(url)
+
+            # Convert to DataFrame
+            input_df = pd.DataFrame([model_features])
             input_df = input_df.reindex(columns=expected_columns, fill_value=0)
             input_scaled = scaler.transform(input_df)
-
-            # Predict probability
             phishing_proba = model.predict_proba(input_scaled)[0][1]
 
-            # Display prediction with special condition for suspicious TLDs
-            if features['suspicious_tld'] == 1:
+            # === Post-prediction rules ===
+            if extra_features['suspicious_tld'] == 1:
                 phishing_proba = 1.0
-                st.warning(f"⚠️ Suspicious URL due to TLD! (Confidence: {phishing_proba * 100:.2f}%)")
-            elif phishing_proba > 0.7:
+                st.warning(f"⚠️ Suspicious TLD detected! (Confidence: {phishing_proba * 100:.2f}%)")
+            elif extra_features['whois_age_days'] < 30:
+                phishing_proba = max(phishing_proba, 0.85)
+                st.warning(f"⚠️ Newly registered domain (<30 days)! (Adjusted Confidence: {phishing_proba * 100:.2f}%)")
+
+            # Final output
+            if phishing_proba > 0.7:
                 st.error(f"🚨 Phishing Detected! (Confidence: {phishing_proba * 100:.2f}%)")
             elif 0.4 < phishing_proba <= 0.7:
                 st.warning(f"⚠️ Suspicious URL! (Confidence: {phishing_proba * 100:.2f}%)")
             else:
                 st.success(f"✅ Legitimate Website (Confidence: {(1 - phishing_proba) * 100:.2f}%)")
-        
-        except Exception as e:
-            st.error(f"❌ Error processing the URL: {str(e)}")
 
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
     else:
         st.warning("⚠️ Please enter a valid URL.")
